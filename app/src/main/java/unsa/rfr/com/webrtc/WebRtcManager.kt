@@ -2,7 +2,6 @@ package unsa.rfr.com.webrtc
 
 import android.content.Context
 import android.util.Log
-import io.getstream.webrtc.android.StreamPeerConnectionFactory
 import org.webrtc.*
 import unsa.rfr.com.SignalingClient
 
@@ -20,23 +19,19 @@ class WebRtcManager(
     private var videoTrack: VideoTrack? = null
     private var audioTrack: AudioTrack? = null
     private var videoCapturer: VideoCapturer? = null
-    private var isInitiator = false
 
     private val peerConnectionFactory: PeerConnectionFactory by lazy {
-        StreamPeerConnectionFactory(
-            context,
-            PeerConnectionFactory.InitializationOptions.builder(context).createInitializationOptions(),
-            PeerConnectionFactory.Options()
-        )
+        val options = PeerConnectionFactory.InitializationOptions.builder(context)
+            .createInitializationOptions()
+        PeerConnectionFactory.initialize(options)
+        PeerConnectionFactory.builder()
+            .setVideoEncoderFactory(DefaultVideoEncoderFactory(eglBase.eglBaseContext, true, true))
+            .createPeerConnectionFactory()
     }
 
-    fun startAsBroadcaster(
-        videoCapturer: VideoCapturer,
-        audioSource: AudioSource
-    ) {
-        isInitiator = true
+    fun startAsBroadcaster(videoCapturer: VideoCapturer, audioSource: AudioSource) {
         this.videoCapturer = videoCapturer
-        createPeerConnection(isOffer = true)
+        createPeerConnection()
 
         val videoSource = peerConnectionFactory.createVideoSource(false)
         val surfaceTextureHelper = SurfaceTextureHelper.create("CaptureThread", eglBase.eglBaseContext)
@@ -54,19 +49,18 @@ class WebRtcManager(
     }
 
     fun startAsViewer() {
-        isInitiator = false
-        createPeerConnection(isOffer = false)
+        createPeerConnection()
     }
 
-    private fun createPeerConnection(isOffer: Boolean) {
+    private fun createPeerConnection() {
         val config = PeerConnection.RTCConfiguration(ArrayList<PeerConnection.IceServer>().apply {
             add(PeerConnection.IceServer("stun:stun.l.google.com:19302"))
             add(PeerConnection.IceServer("stun:stun.cloudflare.com:3478"))
         })
 
         peerConnection = peerConnectionFactory.createPeerConnection(
-            listOf(config),
-            object : PeerConnectionObserver {
+            config,
+            object : PeerConnection.Observer {
                 override fun onIceCandidate(candidate: IceCandidate?) {
                     candidate?.let {
                         signalingClient.send(

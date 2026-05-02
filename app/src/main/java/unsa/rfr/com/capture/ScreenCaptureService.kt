@@ -63,7 +63,7 @@ class ScreenCaptureService : Service() {
     private fun startScreenCapture(resultCode: Int, data: Intent) {
         val metrics = DisplayMetrics()
         val dm = getSystemService(Context.DISPLAY_SERVICE) as DisplayManager
-        dm.getDisplay(Display.DEFAULT_DISPLAY)?.getRealMetrics(metrics)
+        dm.getDisplay(android.view.Display.DEFAULT_DISPLAY)?.getRealMetrics(metrics)
 
         val mpm = getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
         mediaProjection = mpm.getMediaProjection(resultCode, data)
@@ -72,17 +72,17 @@ class ScreenCaptureService : Service() {
         val height = metrics.heightPixels
         val dpi = metrics.densityDpi
 
+        // ScreenCapturerAndroid 只需要 Intent 和 Callback，宽高DPI通过 createVirtualDisplay 设置，不需要传给 capturer
         screenCapturer = ScreenCapturerAndroid(
             data,
             object : MediaProjection.Callback() {
                 override fun onStop() {
                     stopCapture()
                 }
-            },
-            width, height, dpi
+            }
         )
 
-        // 在 WebRtcManager.startAsBroadcaster 调用 initialize 时才真正初始化，这里先准备好 capturer
+        // 虚拟显示器连接到 capturer 的 Surface
         virtualDisplay = mediaProjection?.createVirtualDisplay(
             "ScreenCapture",
             width, height, dpi,

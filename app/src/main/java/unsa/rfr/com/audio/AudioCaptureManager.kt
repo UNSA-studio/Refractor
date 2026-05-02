@@ -1,6 +1,7 @@
 package unsa.rfr.com.audio
 
 import android.content.Context
+import android.media.AudioAttributes
 import android.media.AudioFormat
 import android.media.AudioPlaybackCaptureConfiguration
 import android.media.AudioRecord
@@ -23,14 +24,12 @@ class AudioCaptureManager(private val context: Context) {
     private var audioRecord: AudioRecord? = null
     private var internalRecord: AudioRecord? = null
     private var mediaProjection: MediaProjection? = null
-    private var currentMode = AudioMode.MIC_ONLY
 
     fun setMediaProjection(projection: MediaProjection) {
         this.mediaProjection = projection
     }
 
     fun createAudioSource(mode: AudioMode): org.webrtc.AudioSource? {
-        currentMode = mode
         return when (mode) {
             AudioMode.MIC_ONLY -> createMicSource()
             AudioMode.INTERNAL_ONLY -> createInternalSource()
@@ -73,9 +72,8 @@ class AudioCaptureManager(private val context: Context) {
                 .build()
             internalRecord?.startRecording()
 
-            // 通过 WebRTC 自定义音频源（这里简化为返回 null，实际需要在 WebRTC 层面绑定）
             Log.d(TAG, "Internal audio capture started")
-            return null // 需要 WebRTC 自定义音频轨道绑定，后续补全
+            return null // 实际使用需要自定义 AudioTrack，暂时返回 null
         } catch (e: Exception) {
             Log.e(TAG, "Failed to start internal capture", e)
             return null
@@ -83,8 +81,7 @@ class AudioCaptureManager(private val context: Context) {
     }
 
     private fun createMixedSource(): org.webrtc.AudioSource? {
-        // 同时采集麦克风和内部音频，在 PCM 层混音后发送
-        return null // 需要 PCM 混音逻辑，后续补全
+        return null // 混音逻辑后续补完
     }
 
     fun stop() {

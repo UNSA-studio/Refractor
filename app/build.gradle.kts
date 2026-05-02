@@ -39,7 +39,7 @@ dependencies {
     // WebSocket
     implementation("org.java-websocket:Java-WebSocket:1.5.7")
 
-    // WebRTC
+    // 官方 WebRTC
     implementation("io.getstream:stream-webrtc-android:1.1.1")
 
     // DataStore

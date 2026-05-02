@@ -2,7 +2,6 @@ package unsa.rfr.com.ui.screens
 
 import android.app.Activity
 import android.content.Intent
-import android.os.Build
 import android.util.Log
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -14,15 +13,14 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.navigation.NavController
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.webrtc.EglBase
-import org.webrtc.MediaStream
+import org.webrtc.SurfaceViewRenderer
 import org.webrtc.VideoTrack
-import unsa.rfr.com.R
 import unsa.rfr.com.SignalingClient
 import unsa.rfr.com.audio.AudioCaptureManager
 import unsa.rfr.com.capture.ScreenCaptureService
-import unsa.rfr.com.webrtc.VideoRenderView
 import unsa.rfr.com.webrtc.WebRtcManager
 
 @Composable
@@ -31,7 +29,17 @@ fun RoomScreen(roomId: String, role: String, navController: NavController) {
     val signalingClient = remember { SignalingClient() }
     val eglBase = remember { EglBase.create() }
     var webRtcManager by remember { mutableStateOf<WebRtcManager?>(null) }
-    val videoView = remember { VideoRenderView(context).apply { init() } }
+    var remoteVideoTrack by remember { mutableStateOf<VideoTrack?>(null) }
+
+    // 创建 SurfaceViewRenderer，它就是 VideoSink
+    val renderer = remember {
+        SurfaceViewRenderer(context).apply {
+            init(eglBase.eglBaseContext, null)
+            setEnableHardwareScaler(true)
+            setZOrderMediaOverlay(true)
+        }
+    }
+
     val scope = rememberCoroutineScope()
 
     val screenCaptureLauncher = rememberLauncherForActivityResult(
@@ -44,15 +52,13 @@ fun RoomScreen(roomId: String, role: String, navController: NavController) {
             }
             context.startForegroundService(intent)
 
-            // 等 Service 初始化 videoCapturer
             scope.launch {
-                kotlinx.coroutines.delay(1000)
+                delay(1000)
                 val capturer = ScreenCaptureService.videoCapturer
                 if (capturer != null && webRtcManager == null) {
                     val audioManager = AudioCaptureManager(context)
-                    // 暂时只启用麦克风
                     val audioSource = audioManager.createAudioSource(AudioCaptureManager.AudioMode.MIC_ONLY)
-                    val manager = WebRtcManager(context, signalingClient, eglBase, videoView)
+                    val manager = WebRtcManager(context, signalingClient, eglBase, renderer)
                     manager.startAsBroadcaster(capturer, audioSource!!)
                     webRtcManager = manager
                 }
@@ -70,16 +76,14 @@ fun RoomScreen(roomId: String, role: String, navController: NavController) {
                         try {
                             val json = org.json.JSONObject(msg.data)
                             if (json.has("type") && json.has("sdp")) {
-                                // SDP 消息
                                 val sdpType = json.getString("type")
                                 val sdpStr = json.getString("sdp")
                                 if (webRtcManager == null) {
-                                    webRtcManager = WebRtcManager(context, signalingClient, eglBase, videoView)
+                                    webRtcManager = WebRtcManager(context, signalingClient, eglBase, renderer)
                                     webRtcManager?.startAsViewer()
                                 }
                                 webRtcManager?.onRemoteSdp(sdpType, sdpStr)
                             } else if (json.has("candidate")) {
-                                // ICE 候选
                                 webRtcManager?.addIceCandidate(
                                     json.getString("candidate"),
                                     json.getInt("sdpMLineIndex"),
@@ -95,10 +99,9 @@ fun RoomScreen(roomId: String, role: String, navController: NavController) {
             }
         }
 
-        // 如果角色是主播，请求录屏
         if (role == "broadcaster") {
-            val mediaProjectionManager = context.getSystemService(android.media.projection.MediaProjectionManager::class.java)
-            screenCaptureLauncher.launch(mediaProjectionManager.createScreenCaptureIntent())
+            val mpm = context.getSystemService(android.media.projection.MediaProjectionManager::class.java)
+            screenCaptureLauncher.launch(mpm.createScreenCaptureIntent())
         }
     }
 
@@ -106,7 +109,7 @@ fun RoomScreen(roomId: String, role: String, navController: NavController) {
         Text("直播间: $roomId", style = MaterialTheme.typography.headlineSmall)
         Spacer(modifier = Modifier.height(8.dp))
         AndroidView(
-            factory = { videoView },
+            factory = { renderer },
             modifier = Modifier.fillMaxWidth().weight(1f)
         )
         Spacer(modifier = Modifier.height(16.dp))
