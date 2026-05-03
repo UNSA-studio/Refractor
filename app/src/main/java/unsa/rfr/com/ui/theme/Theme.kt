@@ -1,19 +1,42 @@
 package unsa.rfr.com.ui.theme
 
 import android.os.Build
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.sp
 import unsa.rfr.com.R
 
 val SilverFont = FontFamily(Font(R.font.silver))
 
+// 增大字体的自定义 Typography
+val RefractorTypography = Typography(
+    displayLarge = TextStyle(fontFamily = SilverFont, fontWeight = FontWeight.Bold, fontSize = 28.sp),
+    displayMedium = TextStyle(fontFamily = SilverFont, fontWeight = FontWeight.Bold, fontSize = 24.sp),
+    displaySmall = TextStyle(fontFamily = SilverFont, fontWeight = FontWeight.Bold, fontSize = 20.sp),
+    headlineLarge = TextStyle(fontFamily = SilverFont, fontWeight = FontWeight.SemiBold, fontSize = 22.sp),
+    headlineMedium = TextStyle(fontFamily = SilverFont, fontWeight = FontWeight.SemiBold, fontSize = 20.sp),
+    headlineSmall = TextStyle(fontFamily = SilverFont, fontWeight = FontWeight.SemiBold, fontSize = 18.sp),
+    titleLarge = TextStyle(fontFamily = SilverFont, fontWeight = FontWeight.Medium, fontSize = 18.sp),
+    titleMedium = TextStyle(fontFamily = SilverFont, fontWeight = FontWeight.Medium, fontSize = 16.sp),
+    titleSmall = TextStyle(fontFamily = SilverFont, fontWeight = FontWeight.Medium, fontSize = 14.sp),
+    bodyLarge = TextStyle(fontFamily = SilverFont, fontSize = 18.sp),
+    bodyMedium = TextStyle(fontFamily = SilverFont, fontSize = 16.sp),
+    bodySmall = TextStyle(fontFamily = SilverFont, fontSize = 14.sp),
+    labelLarge = TextStyle(fontFamily = SilverFont, fontWeight = FontWeight.Medium, fontSize = 16.sp),
+    labelMedium = TextStyle(fontFamily = SilverFont, fontSize = 14.sp),
+    labelSmall = TextStyle(fontFamily = SilverFont, fontSize = 12.sp),
+)
+
 enum class ThemeColor(val colorScheme: ColorScheme) {
-    DYNAMIC(lightColorScheme()), // 占位，实际运行时替换
+    DYNAMIC(darkColorScheme()),  // 占位
     BLUE(darkColorScheme(
         primary = Color(0xFF9ECAFF),
         onPrimary = Color(0xFF003258),
@@ -122,11 +145,14 @@ fun RefractorTheme(
 
     MaterialTheme(
         colorScheme = colorScheme,
-        typography = Typography(
-            bodyLarge = TextStyle(fontFamily = SilverFont),
-            bodyMedium = TextStyle(fontFamily = SilverFont),
-            labelLarge = TextStyle(fontFamily = SilverFont),
-        ),
-        content = content
-    )
+        typography = RefractorTypography
+    ) {
+        // 强制所有页面背景为深色
+        Surface(
+            modifier = Modifier.fillMaxSize(),
+            color = MaterialTheme.colorScheme.background
+        ) {
+            content()
+        }
+    }
 }
