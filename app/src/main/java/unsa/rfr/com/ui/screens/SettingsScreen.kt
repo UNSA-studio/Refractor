@@ -1,28 +1,29 @@
 package unsa.rfr.com.ui.screens
 
-import androidx.compose.animation.core.*
+import androidx.compose.animation.core.Animatable
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.material3.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
+import kotlinx.coroutines.launch
 
 @Composable
-fun SettingsScreen(navController: NavController, viewModel: SettingsViewModel) {
+fun SettingsScreen(navController: NavController) {
     var audioMode by remember { mutableIntStateOf(0) }
     var darkMode by remember { mutableStateOf(false) }
     var dynamicColor by remember { mutableStateOf(true) }
-
-    // 齿轮旋转动画
     val rotation = remember { Animatable(0f) }
+    val scope = rememberCoroutineScope()
 
     Column(Modifier.fillMaxSize().padding(16.dp)) {
+        // 标题 + 齿轮图标
         Row(verticalAlignment = Alignment.CenterVertically) {
             Icon(
                 Icons.Default.Settings,
@@ -31,8 +32,9 @@ fun SettingsScreen(navController: NavController, viewModel: SettingsViewModel) {
                     .size(32.dp)
                     .rotate(rotation.value)
                     .clickable {
-                        // 点击齿轮转一圈
-                        viewModel.rotateGear()
+                        scope.launch {
+                            rotation.animateTo(rotation.value + 360f)
+                        }
                     },
                 tint = MaterialTheme.colorScheme.primary
             )
