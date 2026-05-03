@@ -30,6 +30,7 @@ import java.util.*
 
 data class BChatMessage(val text: String, val isMine: Boolean)
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun BroadcasterScreen(roomId: String, navController: NavController) {
     val context = LocalContext.current
@@ -115,7 +116,6 @@ fun BroadcasterScreen(roomId: String, navController: NavController) {
             }
         }
 
-        // 自动请求屏幕录制权限（首启）
         val mpm = context.getSystemService(android.media.projection.MediaProjectionManager::class.java)
         screenCaptureLauncher.launch(mpm.createScreenCaptureIntent())
     }
@@ -131,7 +131,6 @@ fun BroadcasterScreen(roomId: String, navController: NavController) {
         }
     ) { padding ->
         Column(Modifier.fillMaxSize().padding(padding)) {
-            // 预览
             AndroidView(
                 factory = { renderer },
                 modifier = Modifier
@@ -139,10 +138,9 @@ fun BroadcasterScreen(roomId: String, navController: NavController) {
                     .weight(0.3f)
             )
 
-            // 控制栏
             Row(Modifier.fillMaxWidth().padding(8.dp), horizontalArrangement = Arrangement.SpaceEvenly) {
-                Button(onClick = { /* 切换音频模式等，可扩展 */ }) { Text("音频设置") }
-                Button(onClick = { /* 关闭投射等 */ }) { Text("停止投射") }
+                Button(onClick = { /* 音频设置 */ }) { Text("音频设置") }
+                Button(onClick = { /* 停止投射 */ }) { Text("停止投射") }
                 Button(onClick = {
                     webRtcManager?.dispose()
                     signalingClient.disconnect()
@@ -150,7 +148,6 @@ fun BroadcasterScreen(roomId: String, navController: NavController) {
                 }) { Text("结束直播") }
             }
 
-            // 聊天
             LazyColumn(Modifier.weight(0.5f).fillMaxWidth().padding(8.dp), reverseLayout = true) {
                 items(chatMessages.reversed()) { msg ->
                     Text(

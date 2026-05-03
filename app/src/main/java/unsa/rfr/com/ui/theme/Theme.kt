@@ -10,12 +10,10 @@ import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
 import unsa.rfr.com.R
 
-// 字体
 val SilverFont = FontFamily(Font(R.font.silver))
 
-// 主题色定义
-enum class ThemeColor(val colorScheme: darkColorScheme) {
-    DYNAMIC(darkColorScheme()), // 占位
+enum class ThemeColor(val colorScheme: ColorScheme) {
+    DYNAMIC(lightColorScheme()), // 占位，实际运行时替换
     BLUE(darkColorScheme(
         primary = Color(0xFF9ECAFF),
         onPrimary = Color(0xFF003258),
