@@ -10,18 +10,18 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.rotate
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import kotlinx.coroutines.launch
+import unsa.rfr.com.RefractorLog
 import unsa.rfr.com.SignalingClient
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HomeScreen(navController: NavController) {
     var roomId by remember { mutableStateOf("") }
-    var idCheckResult by remember { mutableStateOf<String?>(null) } // "valid", "invalid", "checking", "offline"
+    var idCheckResult by remember { mutableStateOf<String?>(null) }
     val rotation = remember { Animatable(0f) }
     val scope = rememberCoroutineScope()
     val signalingClient = remember { SignalingClient() }
@@ -31,7 +31,7 @@ fun HomeScreen(navController: NavController) {
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Refractor") },
+                title = { Text("Refractor", style = MaterialTheme.typography.headlineLarge) },
                 actions = {
                     IconButton(onClick = {
                         scope.launch {
@@ -79,9 +79,11 @@ fun HomeScreen(navController: NavController) {
             Button(
                 onClick = {
                     if (isValidFormat) {
+                        RefractorLog.write("用户点击进入直播间, ID=$roomId")
                         idCheckResult = "checking"
                         scope.launch {
                             val online = signalingClient.checkRoom(roomId)
+                            RefractorLog.write("房间检查结果: online=$online")
                             idCheckResult = when {
                                 online > 0 -> {
                                     navController.navigate("room/$roomId/viewer")
@@ -103,7 +105,10 @@ fun HomeScreen(navController: NavController) {
             Spacer(modifier = Modifier.height(16.dp))
 
             Button(
-                onClick = { navController.navigate("create") },
+                onClick = {
+                    RefractorLog.write("用户点击创建直播")
+                    navController.navigate("create")
+                },
                 modifier = Modifier.fillMaxWidth(),
                 colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary)
             ) {

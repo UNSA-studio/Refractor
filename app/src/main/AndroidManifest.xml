@@ -14,6 +14,7 @@
         android:maxSdkVersion="28" />
 
     <application
+        android:name=".App"
         android:allowBackup="true"
         android:label="Refractor"
         android:supportsRtl="true"

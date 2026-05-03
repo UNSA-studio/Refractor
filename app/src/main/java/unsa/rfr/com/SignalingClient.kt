@@ -37,22 +37,28 @@ class SignalingClient(
         data class Chat(val message: String, val from: String) : SignalMessage()
     }
 
-    // 新增：检查房间是否存在（在线人数>0）
     suspend fun checkRoom(roomId: String): Int {
         return withContext(Dispatchers.IO) {
             try {
                 val url = URL("https://rfr-sl.cc.cd/check/$roomId")
+                RefractorLog.write("HTTP GET $url")
                 val conn = url.openConnection() as HttpURLConnection
                 conn.connectTimeout = 5000
                 conn.readTimeout = 5000
                 conn.requestMethod = "GET"
-                if (conn.responseCode == 200) {
+                val code = conn.responseCode
+                if (code == 200) {
                     val json = conn.inputStream.bufferedReader().readText()
+                    RefractorLog.write("Check room response: $json")
                     val obj = org.json.JSONObject(json)
                     obj.optInt("online", 0)
-                } else -1
+                } else {
+                    RefractorLog.write("Check room HTTP error: $code")
+                    -1
+                }
             } catch (e: Exception) {
                 Log.e(TAG, "Check room failed", e)
+                RefractorLog.write("Check room exception: ${e.message}")
                 -1
             }
         }
@@ -60,6 +66,7 @@ class SignalingClient(
 
     fun connect(roomId: String) {
         currentRoomId = roomId
+        RefractorLog.write("开始连接信令, room=$roomId")
         doConnect()
         startHeartbeat()
     }
@@ -71,23 +78,30 @@ class SignalingClient(
         webSocketClient = object : WebSocketClient(uri) {
             override fun onOpen(handshakedata: ServerHandshake?) {
                 Log.d(TAG, "Connected to room $roomId")
+                RefractorLog.write("信令WebSocket已连接: $roomId")
                 connected.set(true)
                 send("{\"type\":\"join\"}")
                 reconnectJob?.cancel()
             }
 
             override fun onMessage(message: String?) {
-                message?.let { handleMessage(it) }
+                message?.let {
+                    // 收到消息，只记录概要不然后端太吵
+                    if (it.length < 200) RefractorLog.write("收到信令消息: $it")
+                    handleMessage(it)
+                }
             }
 
             override fun onClose(code: Int, reason: String?, remote: Boolean) {
                 Log.d(TAG, "Disconnected: $reason")
+                RefractorLog.write("信令断开: code=$code reason=$reason")
                 connected.set(false)
                 scheduleReconnect()
             }
 
             override fun onError(ex: Exception?) {
                 Log.e(TAG, "WebSocket error", ex)
+                RefractorLog.write("信令异常: ${ex?.message}")
             }
         }.apply { connect() }
     }
@@ -110,6 +124,7 @@ class SignalingClient(
             }
         } catch (e: Exception) {
             Log.e(TAG, "Failed to parse message: $raw", e)
+            RefractorLog.write("解析消息失败: ${e.message}")
         }
     }
 
@@ -123,6 +138,7 @@ class SignalingClient(
                         webSocketClient?.send("{\"type\":\"ping\"}")
                     } catch (e: Exception) {
                         Log.w(TAG, "Heartbeat failed", e)
+                        RefractorLog.write("心跳失败: ${e.message}")
                     }
                 }
             }
@@ -134,7 +150,7 @@ class SignalingClient(
         reconnectJob = scope.launch {
             delay(RECONNECT_DELAY_MS)
             if (!connected.get()) {
-                Log.d(TAG, "Attempting reconnect...")
+                RefractorLog.write("尝试重连信令...")
                 doConnect()
             }
         }
@@ -145,6 +161,7 @@ class SignalingClient(
             webSocketClient?.send(data)
         } catch (e: Exception) {
             Log.e(TAG, "Send failed", e)
+            RefractorLog.write("发送失败: ${e.message}")
         }
     }
 
@@ -154,5 +171,6 @@ class SignalingClient(
         reconnectJob?.cancel()
         webSocketClient?.close()
         currentRoomId = null
+        RefractorLog.write("信令已断开")
     }
 }
