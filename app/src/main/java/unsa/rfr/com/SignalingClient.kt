@@ -5,7 +5,9 @@ import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.Channel
 import org.java_websocket.client.WebSocketClient
 import org.java_websocket.handshake.ServerHandshake
+import java.net.HttpURLConnection
 import java.net.URI
+import java.net.URL
 import java.util.concurrent.atomic.AtomicBoolean
 
 class SignalingClient(
@@ -33,6 +35,27 @@ class SignalingClient(
         object Pong : SignalMessage()
         data class Error(val message: String) : SignalMessage()
         data class Chat(val message: String, val from: String) : SignalMessage()
+    }
+
+    // 新增：检查房间是否存在（在线人数>0）
+    suspend fun checkRoom(roomId: String): Int {
+        return withContext(Dispatchers.IO) {
+            try {
+                val url = URL("https://rfr-sl.cc.cd/check/$roomId")
+                val conn = url.openConnection() as HttpURLConnection
+                conn.connectTimeout = 5000
+                conn.readTimeout = 5000
+                conn.requestMethod = "GET"
+                if (conn.responseCode == 200) {
+                    val json = conn.inputStream.bufferedReader().readText()
+                    val obj = org.json.JSONObject(json)
+                    obj.optInt("online", 0)
+                } else -1
+            } catch (e: Exception) {
+                Log.e(TAG, "Check room failed", e)
+                -1
+            }
+        }
     }
 
     fun connect(roomId: String) {

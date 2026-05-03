@@ -1,17 +1,19 @@
 package unsa.rfr.com.ui.screens
 
 import android.os.Environment
-import android.util.Log
+import android.widget.Toast
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.navigation.NavController
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.webrtc.EglBase
 import org.webrtc.SurfaceViewRenderer
@@ -33,6 +35,7 @@ fun ViewerScreen(roomId: String, navController: NavController) {
     val scope = rememberCoroutineScope()
     var chatMessages by remember { mutableStateOf(listOf<VChatMessage>()) }
     var chatInput by remember { mutableStateOf("") }
+    var connectionStatus by remember { mutableStateOf("连接中…") } // “连接中…”, “等待主播…”, “直播中”, “连接超时”
 
     val logFile = remember {
         val dateStr = SimpleDateFormat("yyyy-MM-dd_HH-mm-ss", Locale.getDefault()).format(Date())
@@ -56,7 +59,16 @@ fun ViewerScreen(roomId: String, navController: NavController) {
             signalingClient.connect(roomId)
         } catch (e: Exception) {
             writeLog("ERROR signaling connect: ${e.message}")
+            connectionStatus = "连接信令失败"
             return@LaunchedEffect
+        }
+
+        // 启动超时任务：15 秒后如果还是“连接中…”，改成超时
+        val timeoutJob = scope.launch {
+            delay(15_000)
+            if (connectionStatus == "连接中…") {
+                connectionStatus = "连接超时，请确认房间ID正确或主播已开播"
+            }
         }
 
         scope.launch {
@@ -71,8 +83,11 @@ fun ViewerScreen(roomId: String, navController: NavController) {
                                 if (webRtcManager == null) {
                                     webRtcManager = WebRtcManager(context, signalingClient, eglBase, renderer)
                                     webRtcManager?.startAsViewer()
+                                    connectionStatus = "已连接，等待视频流…"
                                 }
                                 webRtcManager?.onRemoteSdp(sdpType, sdpStr)
+                                writeLog("Received SDP: $sdpType")
+                                timeoutJob.cancel() // 收到SDP，取消超时
                             } else if (json.has("candidate")) {
                                 webRtcManager?.addIceCandidate(
                                     json.getString("candidate"),
@@ -87,6 +102,11 @@ fun ViewerScreen(roomId: String, navController: NavController) {
                     is SignalingClient.SignalMessage.Chat -> {
                         chatMessages = chatMessages + VChatMessage(msg.message, false)
                     }
+                    is SignalingClient.SignalMessage.UserJoined -> {
+                        if (connectionStatus.startsWith("连接")) {
+                            connectionStatus = "等待主播开始直播…"
+                        }
+                    }
                     else -> {}
                 }
             }
@@ -94,7 +114,15 @@ fun ViewerScreen(roomId: String, navController: NavController) {
     }
 
     Column(Modifier.fillMaxSize()) {
-        // 全屏视频区
+        // 状态栏
+        Text(
+            text = connectionStatus,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.padding(8.dp)
+        )
+
+        // 视频区域
         AndroidView(
             factory = { renderer },
             modifier = Modifier

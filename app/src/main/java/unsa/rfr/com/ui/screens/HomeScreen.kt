@@ -15,15 +15,18 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import kotlinx.coroutines.launch
-import unsa.rfr.com.R
+import unsa.rfr.com.SignalingClient
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HomeScreen(navController: NavController) {
     var roomId by remember { mutableStateOf("") }
-    var idCheckResult by remember { mutableStateOf<String?>(null) } // null=未校验, "valid"/"invalid"
+    var idCheckResult by remember { mutableStateOf<String?>(null) } // "valid", "invalid", "checking", "offline"
     val rotation = remember { Animatable(0f) }
     val scope = rememberCoroutineScope()
+    val signalingClient = remember { SignalingClient() }
+
+    val isValidFormat = roomId.matches(Regex("^[A-Za-z0-9]{4}-[A-Za-z0-9]{4}-[A-Za-z0-9]{4}-user\\d{3}$"))
 
     Scaffold(
         topBar = {
@@ -57,48 +60,44 @@ fun HomeScreen(navController: NavController) {
                 value = roomId,
                 onValueChange = {
                     roomId = it
-                    idCheckResult = null // 输入变化后重置检查
+                    idCheckResult = null
                 },
                 label = { Text("输入 RFR-ID 加入直播间") },
                 modifier = Modifier.fillMaxWidth(),
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Ascii),
-                trailingIcon = {
-                    // 简单校验：格式大致符合 xxxx-xxxx-xxxx-userxxx
-                    if (roomId.isNotBlank()) {
-                        val isValid = roomId.matches(Regex("^[A-Za-z0-9]{4}-[A-Za-z0-9]{4}-[A-Za-z0-9]{4}-user\\d{3}$"))
-                        idCheckResult = if (isValid) "valid" else "invalid"
-                    }
-                }
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Ascii)
             )
 
             if (idCheckResult == "invalid") {
                 Text("ID 格式错误", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
             }
+            if (idCheckResult == "offline") {
+                Text("该直播间不存在或已结束", color = MaterialTheme.colorScheme.error)
+            }
 
             Spacer(modifier = Modifier.height(8.dp))
 
-            // 如果 ID 有效，显示直播信息占位卡片（未来可查询信令服务器获取实际详情）
-            if (idCheckResult == "valid") {
-                Card(modifier = Modifier.fillMaxWidth()) {
-                    Column(Modifier.padding(12.dp)) {
-                        Text("直播间预览", style = MaterialTheme.typography.titleMedium)
-                        Text("ID: $roomId")
-                        Text("状态：正在直播 / 等待中")
-                        // 宣传图（默认使用图标）
-                        Icon(
-                            painter = androidx.compose.ui.res.painterResource(id = R.drawable.ic_launcher_foreground),
-                            contentDescription = null,
-                            modifier = Modifier.size(48.dp)
-                        )
+            Button(
+                onClick = {
+                    if (isValidFormat) {
+                        idCheckResult = "checking"
+                        scope.launch {
+                            val online = signalingClient.checkRoom(roomId)
+                            idCheckResult = when {
+                                online > 0 -> {
+                                    navController.navigate("room/$roomId/viewer")
+                                    null
+                                }
+                                else -> "offline"
+                            }
+                        }
+                    } else {
+                        idCheckResult = "invalid"
                     }
-                }
-                Spacer(modifier = Modifier.height(8.dp))
-                Button(
-                    onClick = { navController.navigate("room/$roomId/viewer") },
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text("进入直播间")
-                }
+                },
+                modifier = Modifier.fillMaxWidth(),
+                enabled = idCheckResult != "checking"
+            ) {
+                Text(if (idCheckResult == "checking") "检查中…" else "进入直播间")
             }
 
             Spacer(modifier = Modifier.height(16.dp))
