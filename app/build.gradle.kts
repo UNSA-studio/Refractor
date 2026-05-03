@@ -16,6 +16,21 @@ android {
         versionName = "1.0"
     }
 
+    signingConfigs {
+        create("debug") {
+            storeFile = file("../debug.keystore")
+            storePassword = "android"
+            keyAlias = "refractor"
+            keyPassword = "android"
+        }
+    }
+
+    buildTypes {
+        debug {
+            signingConfig = signingConfigs.getByName("debug")
+        }
+    }
+
     buildFeatures {
         compose = true
     }
@@ -35,19 +50,10 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.7")
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.7")
     implementation("androidx.navigation:navigation-compose:2.8.5")
-
-    // WebSocket
     implementation("org.java-websocket:Java-WebSocket:1.5.7")
-
-    // 官方 WebRTC
     implementation("io.getstream:stream-webrtc-android:1.1.1")
-
-    // DataStore
     implementation("androidx.datastore:datastore-preferences:1.1.1")
-
-    // Coroutines
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
-
-    // JSON
     implementation("org.json:json:20240303")
+    implementation("androidx.core:core-ktx:1.13.1")
 }
