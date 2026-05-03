@@ -32,6 +32,7 @@ class SignalingClient(
         data class UserLeft(val count: Int) : SignalMessage()
         object Pong : SignalMessage()
         data class Error(val message: String) : SignalMessage()
+        data class Chat(val message: String, val from: String) : SignalMessage()
     }
 
     fun connect(roomId: String) {
@@ -65,9 +66,7 @@ class SignalingClient(
             override fun onError(ex: Exception?) {
                 Log.e(TAG, "WebSocket error", ex)
             }
-        }.apply {
-            connect()
-        }
+        }.apply { connect() }
     }
 
     private fun handleMessage(raw: String) {
@@ -80,16 +79,11 @@ class SignalingClient(
                         signalChannel.trySend(SignalMessage.Signal(data))
                     }
                 }
-                "user-joined" -> {
-                    val count = json.optInt("count")
-                    signalChannel.trySend(SignalMessage.UserJoined(count))
-                }
-                "user-left" -> {
-                    val count = json.optInt("count")
-                    signalChannel.trySend(SignalMessage.UserLeft(count))
-                }
+                "user-joined" -> signalChannel.trySend(SignalMessage.UserJoined(json.optInt("count")))
+                "user-left" -> signalChannel.trySend(SignalMessage.UserLeft(json.optInt("count")))
                 "pong" -> signalChannel.trySend(SignalMessage.Pong)
                 "error" -> signalChannel.trySend(SignalMessage.Error(json.optString("message")))
+                "chat" -> signalChannel.trySend(SignalMessage.Chat(json.optString("data"), json.optString("from")))
             }
         } catch (e: Exception) {
             Log.e(TAG, "Failed to parse message: $raw", e)

@@ -1,12 +1,13 @@
 package unsa.rfr.com.ui.screens
 
-import android.app.Activity
 import android.content.Intent
 import android.os.Environment
 import android.util.Log
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
@@ -27,6 +28,8 @@ import java.io.FileWriter
 import java.text.SimpleDateFormat
 import java.util.*
 
+data class ChatMessage(val text: String, val isMine: Boolean)
+
 @Composable
 fun RoomScreen(roomId: String, role: String, navController: NavController) {
     val context = LocalContext.current
@@ -34,22 +37,19 @@ fun RoomScreen(roomId: String, role: String, navController: NavController) {
     val eglBase = remember { EglBase.create() }
     var webRtcManager by remember { mutableStateOf<WebRtcManager?>(null) }
     val scope = rememberCoroutineScope()
+    var chatMessages by remember { mutableStateOf(listOf<ChatMessage>()) }
+    var chatInput by remember { mutableStateOf("") }
 
-    // 日志文件
     val logFile = remember {
         val dateStr = SimpleDateFormat("yyyy-MM-dd_HH-mm-ss", Locale.getDefault()).format(Date())
-        val downloadsDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
-        File(downloadsDir, "log-$dateStr.txt")
+        File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "log-$dateStr.txt")
     }
 
     fun writeLog(msg: String) {
-        try {
-            FileWriter(logFile, true).use { it.append("${SimpleDateFormat("HH:mm:ss.SSS", Locale.getDefault()).format(Date())} $msg\n") }
-        } catch (_: Exception) {}
+        try { FileWriter(logFile, true).use { it.append("${SimpleDateFormat("HH:mm:ss.SSS", Locale.getDefault()).format(Date())} $msg\n") } } catch (_: Exception) {}
         Log.d("Refractor", msg)
     }
 
-    // 视频渲染组件
     val renderer = remember {
         SurfaceViewRenderer(context).apply {
             init(eglBase.eglBaseContext, null)
@@ -61,45 +61,38 @@ fun RoomScreen(roomId: String, role: String, navController: NavController) {
     val screenCaptureLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.StartActivityForResult()
     ) { result ->
-        if (result.resultCode == Activity.RESULT_OK && result.data != null) {
-            try {
-                writeLog("Screen capture permission granted, starting capture service")
-                val intent = Intent(context, ScreenCaptureService::class.java).apply {
-                    putExtra("resultCode", result.resultCode)
-                    putExtra("data", result.data)
-                }
-                context.startForegroundService(intent)
-
-                scope.launch {
-                    delay(1000)
-                    val capturer = ScreenCaptureService.videoCapturer
-                    if (capturer != null) {
-                        try {
-                            val audioManager = AudioCaptureManager(context)
-                            val audioSource = audioManager.createAudioSource(AudioCaptureManager.AudioMode.MIC_ONLY)
-                            val manager = WebRtcManager(context, signalingClient, eglBase, renderer)
-                            manager.startAsBroadcaster(capturer, audioSource!!)
-                            webRtcManager = manager
-                            writeLog("Broadcaster WebRTC initialized successfully")
-                        } catch (e: Exception) {
-                            writeLog("ERROR starting broadcaster: ${e.message}")
-                        }
-                    } else {
-                        writeLog("ERROR videoCapturer is null after 1s")
+        if (result.resultCode == android.app.Activity.RESULT_OK && result.data != null) {
+            writeLog("Screen capture permission granted")
+            val intent = Intent(context, ScreenCaptureService::class.java).apply {
+                putExtra("resultCode", result.resultCode)
+                putExtra("data", result.data)
+            }
+            context.startForegroundService(intent)
+            scope.launch {
+                delay(1000)
+                val capturer = ScreenCaptureService.videoCapturer
+                if (capturer != null) {
+                    try {
+                        val audioManager = AudioCaptureManager(context)
+                        val audioSource = audioManager.createAudioSource(AudioCaptureManager.AudioMode.MIC_ONLY)
+                        val manager = WebRtcManager(context, signalingClient, eglBase, renderer)
+                        manager.startAsBroadcaster(capturer, audioSource!!)
+                        webRtcManager = manager
+                        writeLog("Broadcaster started")
+                    } catch (e: Exception) {
+                        writeLog("ERROR broadcaster: ${e.message}")
                     }
+                } else {
+                    writeLog("ERROR videoCapturer null")
                 }
-            } catch (e: Exception) {
-                writeLog("ERROR in screen capture setup: ${e.message}")
             }
         }
     }
 
     LaunchedEffect(roomId) {
-        writeLog("RoomScreen launched: roomId=$roomId, role=$role")
-
+        writeLog("RoomScreen launched, room=$roomId, role=$role")
         try {
             signalingClient.connect(roomId)
-            writeLog("Signaling client connected")
         } catch (e: Exception) {
             writeLog("ERROR connecting signaling: ${e.message}")
             return@LaunchedEffect
@@ -117,25 +110,24 @@ fun RoomScreen(roomId: String, role: String, navController: NavController) {
                                 if (webRtcManager == null) {
                                     webRtcManager = WebRtcManager(context, signalingClient, eglBase, renderer)
                                     webRtcManager?.startAsViewer()
-                                    writeLog("WebRTC viewer started")
                                 }
                                 webRtcManager?.onRemoteSdp(sdpType, sdpStr)
-                                writeLog("Received SDP: $sdpType")
                             } else if (json.has("candidate")) {
                                 webRtcManager?.addIceCandidate(
                                     json.getString("candidate"),
                                     json.getInt("sdpMLineIndex"),
                                     json.getString("sdpMid")
                                 )
-                                writeLog("ICE candidate added")
                             }
                         } catch (e: Exception) {
                             writeLog("ERROR parsing signal: ${e.message}")
                         }
                     }
-                    is SignalingClient.SignalMessage.UserJoined -> writeLog("User joined, count=${msg.count}")
-                    is SignalingClient.SignalMessage.UserLeft -> writeLog("User left, count=${msg.count}")
-                    is SignalingClient.SignalMessage.Pong -> writeLog("Heartbeat pong")
+                    is SignalingClient.SignalMessage.Chat -> {
+                        chatMessages = chatMessages + ChatMessage(msg.message, false)
+                    }
+                    is SignalingClient.SignalMessage.UserJoined -> writeLog("User joined (${msg.count})")
+                    is SignalingClient.SignalMessage.UserLeft -> writeLog("User left (${msg.count})")
                     else -> {}
                 }
             }
@@ -145,27 +137,64 @@ fun RoomScreen(roomId: String, role: String, navController: NavController) {
             try {
                 val mpm = context.getSystemService(android.media.projection.MediaProjectionManager::class.java)
                 screenCaptureLauncher.launch(mpm.createScreenCaptureIntent())
-                writeLog("Launched screen capture request")
             } catch (e: Exception) {
                 writeLog("ERROR launching screen capture: ${e.message}")
             }
         }
     }
 
-    // UI
-    Column(Modifier.fillMaxSize().padding(16.dp)) {
-        Text("直播间: $roomId", style = MaterialTheme.typography.headlineSmall)
-        Spacer(modifier = Modifier.height(8.dp))
+    Column(Modifier.fillMaxSize()) {
+        // 视频区域
         AndroidView(
             factory = { renderer },
-            modifier = Modifier.fillMaxWidth().weight(1f)
+            modifier = Modifier
+                .fillMaxWidth()
+                .weight(0.45f)
         )
-        Spacer(modifier = Modifier.height(16.dp))
+
+        // 聊天区域
+        LazyColumn(
+            modifier = Modifier
+                .weight(0.45f)
+                .fillMaxWidth()
+                .padding(horizontal = 8.dp),
+            reverseLayout = true
+        ) {
+            items(chatMessages.reversed()) { msg ->
+                Text(
+                    text = msg.text,
+                    color = if (msg.isMine) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.padding(vertical = 2.dp)
+                )
+            }
+        }
+
+        // 输入栏
+        Row(Modifier.fillMaxWidth().padding(8.dp)) {
+            OutlinedTextField(
+                value = chatInput,
+                onValueChange = { chatInput = it },
+                modifier = Modifier.weight(1f),
+                label = { Text("消息") }
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Button(onClick = {
+                if (chatInput.isNotBlank()) {
+                    signalingClient.send("{\"type\":\"chat\",\"data\":\"$chatInput\"}")
+                    chatMessages = chatMessages + ChatMessage(chatInput, true)
+                    chatInput = ""
+                }
+            }) {
+                Text("发送")
+            }
+        }
+
+        // 退出按钮
         Button(
             onClick = {
                 writeLog("Exiting room")
-                try { webRtcManager?.dispose() } catch (_: Exception) {}
-                try { signalingClient.disconnect() } catch (_: Exception) {}
+                webRtcManager?.dispose()
+                signalingClient.disconnect()
                 navController.popBackStack()
             },
             modifier = Modifier.fillMaxWidth()
