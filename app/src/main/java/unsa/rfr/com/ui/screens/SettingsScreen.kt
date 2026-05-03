@@ -22,7 +22,6 @@ import androidx.core.content.FileProvider
 import androidx.navigation.NavController
 import unsa.rfr.com.RefractorLog
 import unsa.rfr.com.ui.theme.ThemeColor
-import java.io.File
 
 @Composable
 fun SettingsScreen(navController: NavController) {
@@ -35,10 +34,7 @@ fun SettingsScreen(navController: NavController) {
     val themeOptions = ThemeColor.entries.map { it.name }
 
     fun saveSettings() {
-        prefs.edit()
-            .putInt("audio_mode", audioMode)
-            .putString("theme_color", selectedThemeName)
-            .apply()
+        prefs.edit().putInt("audio_mode", audioMode).putString("theme_color", selectedThemeName).apply()
     }
 
     BackHandler {
@@ -78,16 +74,13 @@ fun SettingsScreen(navController: NavController) {
             Spacer(modifier = Modifier.width(4.dp))
             Icon(
                 if (themeExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
-                contentDescription = "展开/折叠",
-                modifier = Modifier.size(24.dp)
+                contentDescription = "展开/折叠", modifier = Modifier.size(24.dp)
             )
         }
         AnimatedVisibility(visible = themeExpanded, enter = expandVertically(), exit = shrinkVertically()) {
             Column {
                 themeOptions.forEach { name ->
-                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.clickable {
-                        selectedThemeName = name
-                    }) {
+                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.clickable { selectedThemeName = name }) {
                         RadioButton(selected = selectedThemeName == name, onClick = { selectedThemeName = name })
                         Text(name)
                     }
@@ -97,31 +90,22 @@ fun SettingsScreen(navController: NavController) {
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        // 导出日志（改用内部缓存）
         Button(
             onClick = {
                 RefractorLog.write("用户请求导出日志")
                 val logFile = RefractorLog.getLogFile()
                 if (logFile.exists()) {
-                    try {
-                        val shareUri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", logFile)
-                        val shareIntent = Intent(Intent.ACTION_SEND).apply {
-                            type = "text/plain"
-                            putExtra(Intent.EXTRA_STREAM, shareUri)
-                            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                        }
-                        context.startActivity(Intent.createChooser(shareIntent, "导出日志"))
-                    } catch (e: Exception) {
-                        RefractorLog.write("导出日志失败: ${e.message}")
+                    val shareUri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", logFile)
+                    val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                        type = "text/plain"
+                        putExtra(Intent.EXTRA_STREAM, shareUri)
+                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                     }
-                } else {
-                    RefractorLog.write("日志文件不存在")
+                    context.startActivity(Intent.createChooser(shareIntent, "导出日志"))
                 }
             },
             modifier = Modifier.fillMaxWidth()
-        ) {
-            Text("导出日志")
-        }
+        ) { Text("导出日志") }
 
         Spacer(modifier = Modifier.height(16.dp))
 
@@ -131,8 +115,6 @@ fun SettingsScreen(navController: NavController) {
                 navController.popBackStack()
             },
             modifier = Modifier.fillMaxWidth()
-        ) {
-            Text("返回")
-        }
+        ) { Text("返回") }
     }
 }

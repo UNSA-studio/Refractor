@@ -5,6 +5,7 @@ import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.Channel
 import org.java_websocket.client.WebSocketClient
 import org.java_websocket.handshake.ServerHandshake
+import org.json.JSONObject
 import java.net.HttpURLConnection
 import java.net.URI
 import java.net.URL
@@ -37,7 +38,40 @@ class SignalingClient(
         data class Chat(val message: String, val from: String) : SignalMessage()
     }
 
-    suspend fun checkRoom(roomId: String): Int {
+    data class RoomInfo(val online: Int, val name: String, val hasPassword: Boolean, val limit: Int)
+
+    /** 注册房间（主播端） */
+    suspend fun createRoom(roomId: String, name: String, hasPassword: Boolean, passwordHash: String, limit: Int): Boolean {
+        return withContext(Dispatchers.IO) {
+            try {
+                val url = URL("https://rfr-sl.cc.cd/create")
+                val conn = url.openConnection() as HttpURLConnection
+                conn.connectTimeout = 5000
+                conn.readTimeout = 5000
+                conn.requestMethod = "POST"
+                conn.doOutput = true
+                conn.setRequestProperty("Content-Type", "application/json")
+                val body = JSONObject().apply {
+                    put("roomId", roomId)
+                    put("name", name)
+                    put("hasPassword", hasPassword)
+                    put("passwordHash", passwordHash)
+                    put("limit", limit)
+                }.toString()
+                conn.outputStream.write(body.toByteArray())
+                val code = conn.responseCode
+                val response = conn.inputStream.bufferedReader().readText()
+                RefractorLog.write("Create room $roomId: HTTP $code $response")
+                code == 200
+            } catch (e: Exception) {
+                RefractorLog.write("Create room failed: ${e.message}")
+                false
+            }
+        }
+    }
+
+    /** 查询房间状态 */
+    suspend fun checkRoom(roomId: String): RoomInfo? {
         return withContext(Dispatchers.IO) {
             try {
                 val url = URL("https://rfr-sl.cc.cd/check/$roomId")
@@ -45,21 +79,27 @@ class SignalingClient(
                 val conn = url.openConnection() as HttpURLConnection
                 conn.connectTimeout = 5000
                 conn.readTimeout = 5000
-                conn.requestMethod = "GET"
-                val code = conn.responseCode
-                if (code == 200) {
+                if (conn.responseCode == 200) {
                     val json = conn.inputStream.bufferedReader().readText()
-                    RefractorLog.write("Check room response: $json")
-                    val obj = org.json.JSONObject(json)
-                    obj.optInt("online", 0)
+                    val obj = JSONObject(json)
+                    if (obj.has("error")) {
+                        RefractorLog.write("Check room error: $json")
+                        null
+                    } else {
+                        RoomInfo(
+                            online = obj.getInt("online"),
+                            name = obj.optString("name", ""),
+                            hasPassword = obj.optBoolean("hasPassword", false),
+                            limit = obj.optInt("limit", 0)
+                        )
+                    }
                 } else {
-                    RefractorLog.write("Check room HTTP error: $code")
-                    -1
+                    RefractorLog.write("Check room HTTP error: ${conn.responseCode}")
+                    null
                 }
             } catch (e: Exception) {
-                Log.e(TAG, "Check room failed", e)
                 RefractorLog.write("Check room exception: ${e.message}")
-                -1
+                null
             }
         }
     }
@@ -86,7 +126,6 @@ class SignalingClient(
 
             override fun onMessage(message: String?) {
                 message?.let {
-                    // 收到消息，只记录概要不然后端太吵
                     if (it.length < 200) RefractorLog.write("收到信令消息: $it")
                     handleMessage(it)
                 }
@@ -112,9 +151,7 @@ class SignalingClient(
             when (json.optString("type")) {
                 "signal" -> {
                     val data = json.optString("data")
-                    if (data != null) {
-                        signalChannel.trySend(SignalMessage.Signal(data))
-                    }
+                    if (data != null) signalChannel.trySend(SignalMessage.Signal(data))
                 }
                 "user-joined" -> signalChannel.trySend(SignalMessage.UserJoined(json.optInt("count")))
                 "user-left" -> signalChannel.trySend(SignalMessage.UserLeft(json.optInt("count")))
@@ -123,7 +160,7 @@ class SignalingClient(
                 "chat" -> signalChannel.trySend(SignalMessage.Chat(json.optString("data"), json.optString("from")))
             }
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to parse message: $raw", e)
+            Log.e(TAG, "Failed to parse message", e)
             RefractorLog.write("解析消息失败: ${e.message}")
         }
     }
@@ -137,7 +174,6 @@ class SignalingClient(
                     try {
                         webSocketClient?.send("{\"type\":\"ping\"}")
                     } catch (e: Exception) {
-                        Log.w(TAG, "Heartbeat failed", e)
                         RefractorLog.write("心跳失败: ${e.message}")
                     }
                 }

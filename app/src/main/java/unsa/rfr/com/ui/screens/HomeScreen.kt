@@ -34,9 +34,7 @@ fun HomeScreen(navController: NavController) {
                 title = { Text("Refractor", style = MaterialTheme.typography.headlineLarge) },
                 actions = {
                     IconButton(onClick = {
-                        scope.launch {
-                            rotation.animateTo(rotation.value + 360f)
-                        }
+                        scope.launch { rotation.animateTo(rotation.value + 360f) }
                         navController.navigate("settings")
                     }) {
                         Icon(
@@ -50,29 +48,19 @@ fun HomeScreen(navController: NavController) {
         }
     ) { padding ->
         Column(
-            Modifier
-                .fillMaxSize()
-                .padding(padding)
-                .padding(16.dp),
+            Modifier.fillMaxSize().padding(padding).padding(16.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             OutlinedTextField(
                 value = roomId,
-                onValueChange = {
-                    roomId = it
-                    idCheckResult = null
-                },
+                onValueChange = { roomId = it; idCheckResult = null },
                 label = { Text("输入 RFR-ID 加入直播间") },
                 modifier = Modifier.fillMaxWidth(),
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Ascii)
             )
 
-            if (idCheckResult == "invalid") {
-                Text("ID 格式错误", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
-            }
-            if (idCheckResult == "offline") {
-                Text("该直播间不存在或已结束", color = MaterialTheme.colorScheme.error)
-            }
+            if (idCheckResult == "invalid") Text("ID 格式错误", color = MaterialTheme.colorScheme.error)
+            if (idCheckResult == "offline") Text("该直播间不存在或已结束", color = MaterialTheme.colorScheme.error)
 
             Spacer(modifier = Modifier.height(8.dp))
 
@@ -82,14 +70,13 @@ fun HomeScreen(navController: NavController) {
                         RefractorLog.write("用户点击进入直播间, ID=$roomId")
                         idCheckResult = "checking"
                         scope.launch {
-                            val online = signalingClient.checkRoom(roomId)
-                            RefractorLog.write("房间检查结果: online=$online")
-                            idCheckResult = when {
-                                online > 0 -> {
-                                    navController.navigate("room/$roomId/viewer")
-                                    null
-                                }
-                                else -> "offline"
+                            val roomInfo = signalingClient.checkRoom(roomId)
+                            if (roomInfo != null) {
+                                RefractorLog.write("房间在线: ${roomInfo.name} 人数:${roomInfo.online}/${roomInfo.limit}")
+                                navController.navigate("room/$roomId/viewer")
+                            } else {
+                                RefractorLog.write("房间不存在或查询失败")
+                                idCheckResult = "offline"
                             }
                         }
                     } else {
@@ -105,10 +92,7 @@ fun HomeScreen(navController: NavController) {
             Spacer(modifier = Modifier.height(16.dp))
 
             Button(
-                onClick = {
-                    RefractorLog.write("用户点击创建直播")
-                    navController.navigate("create")
-                },
+                onClick = { navController.navigate("create") },
                 modifier = Modifier.fillMaxWidth(),
                 colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary)
             ) {
