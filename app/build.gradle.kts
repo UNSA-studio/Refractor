@@ -17,7 +17,8 @@ android {
     }
 
     signingConfigs {
-        create("debug") {
+        // 修改默认 debug 签名，使用固定 keystore
+        getByName("debug") {
             storeFile = file("../debug.keystore")
             storePassword = "android"
             keyAlias = "refractor"
