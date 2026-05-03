@@ -68,7 +68,14 @@ class WebRtcManager(
                         )
                     }
                 }
-                override fun onAddTrack(receiver: RtpReceiver, streams: Array<out MediaStream>) {}
+                override fun onAddTrack(receiver: RtpReceiver, streams: Array<out MediaStream>) {
+                    // 远端视频流自动渲染
+                    streams.forEach { stream ->
+                        stream.videoTracks.forEach { track ->
+                            track.addSink(videoSink)
+                        }
+                    }
+                }
                 override fun onRemoveTrack(receiver: RtpReceiver) {}
                 override fun onDataChannel(channel: DataChannel) {}
                 override fun onRenegotiationNeeded() {}
@@ -81,10 +88,12 @@ class WebRtcManager(
                 override fun onIceConnectionReceivingChange(receiving: Boolean) {
                     Log.d(TAG, "ICE receiving change: $receiving")
                 }
-                override fun onStandardizedIceConnectionChange(state: PeerConnection.IceConnectionState) {}
-                override fun onConnectionChange(state: PeerConnection.PeerConnectionState) {}
-                override fun onSelectedCandidatePairChange(event: CandidatePairChangeEvent) {}
-                override fun onIceCandidateError(event: IceCandidateErrorEvent) {}
+                override fun onIceGatheringChange(state: PeerConnection.IceGatheringState) {
+                    Log.d(TAG, "ICE gathering state: $state")
+                }
+                override fun onIceCandidatesRemoved(candidates: Array<out IceCandidate>) {}
+                override fun onAddStream(stream: MediaStream?) {}
+                override fun onRemoveStream(stream: MediaStream?) {}
             }
         )
     }
