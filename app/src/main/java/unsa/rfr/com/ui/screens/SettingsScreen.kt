@@ -1,7 +1,8 @@
 package unsa.rfr.com.ui.screens
 
 import android.content.Context
-import android.content.Intent
+import android.os.Environment
+import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.expandVertically
@@ -18,10 +19,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
-import androidx.core.content.FileProvider
 import androidx.navigation.NavController
 import unsa.rfr.com.RefractorLog
 import unsa.rfr.com.ui.theme.ThemeColor
+import java.io.File
+import java.io.FileOutputStream
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 @Composable
 fun SettingsScreen(navController: NavController) {
@@ -90,18 +95,23 @@ fun SettingsScreen(navController: NavController) {
 
         Spacer(modifier = Modifier.height(16.dp))
 
+        // 导出日志：直接存到 Download/Refractor/log-xxxx.txt
         Button(
             onClick = {
-                RefractorLog.write("用户请求导出日志")
-                val logFile = RefractorLog.getLogFile()
-                if (logFile.exists()) {
-                    val shareUri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", logFile)
-                    val shareIntent = Intent(Intent.ACTION_SEND).apply {
-                        type = "text/plain"
-                        putExtra(Intent.EXTRA_STREAM, shareUri)
-                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                try {
+                    val dateStr = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
+                    val targetDir = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "Refractor")
+                    if (!targetDir.exists()) targetDir.mkdirs()
+                    val outFile = File(targetDir, "log-$dateStr.txt")
+
+                    // 写入应用内部日志内容
+                    FileOutputStream(outFile).use { fos ->
+                        fos.write(RefractorLog.getLogContent().toByteArray())
                     }
-                    context.startActivity(Intent.createChooser(shareIntent, "导出日志"))
+
+                    Toast.makeText(context, "日志已保存到 ${outFile.absolutePath}", Toast.LENGTH_LONG).show()
+                } catch (e: Exception) {
+                    Toast.makeText(context, "保存失败: ${e.message}", Toast.LENGTH_SHORT).show()
                 }
             },
             modifier = Modifier.fillMaxWidth()

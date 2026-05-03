@@ -1,7 +1,6 @@
 package unsa.rfr.com.ui.screens
 
 import android.content.Intent
-import android.os.Environment
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
@@ -58,25 +57,40 @@ fun BroadcasterScreen(roomId: String, navController: NavController) {
             }
             context.startForegroundService(intent)
             scope.launch {
-                delay(1000)
+                delay(1500) // 多等一会儿，确保 Service 准备好
                 val capturer = ScreenCaptureService.videoCapturer
-                if (capturer != null) {
+                if (capturer == null) {
+                    RefractorLog.write("ERROR: videoCapturer 仍为空")
+                    return@launch
+                }
+                try {
                     val audioManager = AudioCaptureManager(context)
                     val audioSource = audioManager.createAudioSource(AudioCaptureManager.AudioMode.MIC_ONLY)
+                    if (audioSource == null) {
+                        RefractorLog.write("ERROR: 无法创建麦克风音频源")
+                        return@launch
+                    }
                     val manager = WebRtcManager(context, signalingClient, eglBase, renderer)
-                    manager.startAsBroadcaster(capturer, audioSource!!)
+                    manager.startAsBroadcaster(capturer, audioSource)
                     webRtcManager = manager
                     RefractorLog.write("直播已开始")
-                } else {
-                    RefractorLog.write("视频采集器为空")
+                } catch (e: Exception) {
+                    RefractorLog.write("启动直播失败: ${e.stackTraceToString()}")
                 }
             }
+        } else {
+            RefractorLog.write("屏幕录制权限被拒绝")
         }
     }
 
     LaunchedEffect(roomId) {
         RefractorLog.write("BroadcasterScreen 进入房间 $roomId")
-        signalingClient.connect(roomId)
+        try {
+            signalingClient.connect(roomId)
+        } catch (e: Exception) {
+            RefractorLog.write("信令连接失败: ${e.stackTraceToString()}")
+            return@LaunchedEffect
+        }
 
         scope.launch {
             for (msg in signalingClient.signalChannel) {
