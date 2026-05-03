@@ -1,19 +1,14 @@
 package unsa.rfr.com.capture
 
 import android.app.*
-import android.content.Context
 import android.content.Intent
-import android.hardware.display.DisplayManager
-import android.hardware.display.VirtualDisplay
 import android.media.projection.MediaProjection
 import android.media.projection.MediaProjectionManager
 import android.os.Build
 import android.os.IBinder
-import android.util.DisplayMetrics
-import android.util.Log
 import androidx.core.app.NotificationCompat
-import io.getstream.webrtc.android.ScreenCapturerAndroid
-import org.webrtc.*
+import org.webrtc.ScreenCapturerAndroid
+import org.webrtc.VideoCapturer
 
 class ScreenCaptureService : Service() {
 
@@ -29,7 +24,6 @@ class ScreenCaptureService : Service() {
             private set
     }
 
-    private var virtualDisplay: VirtualDisplay? = null
     private var screenCapturer: ScreenCapturerAndroid? = null
 
     override fun onBind(intent: Intent?): IBinder? = null
@@ -61,48 +55,26 @@ class ScreenCaptureService : Service() {
     }
 
     private fun startScreenCapture(resultCode: Int, data: Intent) {
-        val metrics = DisplayMetrics()
-        val dm = getSystemService(Context.DISPLAY_SERVICE) as DisplayManager
-        dm.getDisplay(android.view.Display.DEFAULT_DISPLAY)?.getRealMetrics(metrics)
-
-        val mpm = getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
+        val mpm = getSystemService(MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
         mediaProjection = mpm.getMediaProjection(resultCode, data)
 
-        val width = metrics.widthPixels
-        val height = metrics.heightPixels
-        val dpi = metrics.densityDpi
-
-        // ScreenCapturerAndroid 只需要 Intent 和 Callback，宽高DPI通过 createVirtualDisplay 设置，不需要传给 capturer
-        screenCapturer = ScreenCapturerAndroid(
-            data,
-            object : MediaProjection.Callback() {
-                override fun onStop() {
-                    stopCapture()
-                }
+        // 使用官方 ScreenCapturerAndroid，它会自动处理 VirtualDisplay
+        screenCapturer = ScreenCapturerAndroid(data, object : MediaProjection.Callback() {
+            override fun onStop() {
+                stopCapture()
             }
-        )
-
-        // 虚拟显示器连接到 capturer 的 Surface
-        virtualDisplay = mediaProjection?.createVirtualDisplay(
-            "ScreenCapture",
-            width, height, dpi,
-            DisplayManager.VIRTUAL_DISPLAY_FLAG_PUBLIC,
-            screenCapturer?.surface,
-            null, null
-        )
-        videoCapturer = screenCapturer as VideoCapturer
-        Log.d(TAG, "Screen capture started: ${width}x${height}")
+        })
+        videoCapturer = screenCapturer
     }
 
     private fun stopCapture() {
-        virtualDisplay?.release()
-        virtualDisplay = null
         screenCapturer?.dispose()
         screenCapturer = null
         videoCapturer = null
         mediaProjection?.stop()
         mediaProjection = null
-        Log.d(TAG, "Screen capture stopped")
+        stopForeground(STOP_FOREGROUND_REMOVE)
+        stopSelf()
     }
 
     private fun createNotificationChannel() {
@@ -128,10 +100,5 @@ class ScreenCaptureService : Service() {
                     PendingIntent.FLAG_IMMUTABLE
                 ))
             .build()
-    }
-
-    override fun onDestroy() {
-        stopCapture()
-        super.onDestroy()
     }
 }

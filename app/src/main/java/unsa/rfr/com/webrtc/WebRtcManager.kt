@@ -74,6 +74,9 @@ class WebRtcManager(
                 override fun onRemoveStream(stream: MediaStream?) {}
                 override fun onDataChannel(channel: DataChannel?) {}
                 override fun onRenegotiationNeeded() {}
+                override fun onSignalingChange(state: PeerConnection.SignalingState?) {
+                    Log.d(TAG, "Signaling state: $state")
+                }
                 override fun onIceConnectionChange(state: PeerConnection.IceConnectionState?) {
                     Log.d(TAG, "ICE state: $state")
                 }
