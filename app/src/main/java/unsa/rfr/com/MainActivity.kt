@@ -84,7 +84,7 @@ fun AppNavGraph() {
             val role = backStackEntry.arguments?.getString("role") ?: "viewer"
             val password = backStackEntry.arguments?.getString("password")
             if (role == "broadcaster") {
-                BroadcasterScreen(roomId, navController)
+                BroadcasterScreen(roomId, password, navController)
             } else {
                 ViewerScreen(roomId, password, navController)
             }

@@ -29,7 +29,7 @@ data class BChatMessage(val text: String, val isMine: Boolean)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun BroadcasterScreen(roomId: String, navController: NavController) {
+fun BroadcasterScreen(roomId: String, password: String?, navController: NavController) {
     val context = LocalContext.current
     val prefs = remember { context.getSharedPreferences("settings", Context.MODE_PRIVATE) }
     val signalingClient = remember { SignalingClient() }
@@ -93,7 +93,7 @@ fun BroadcasterScreen(roomId: String, navController: NavController) {
     LaunchedEffect(roomId) {
         RefractorLog.write("BroadcasterScreen 进入房间 $roomId")
         try {
-            signalingClient.connect(roomId)
+            signalingClient.connect(roomId, password?.takeIf { it.isNotBlank() })
         } catch (e: Exception) {
             RefractorLog.write("信令连接失败: ${e.stackTraceToString()}")
             errorMessage = "信令连接失败"

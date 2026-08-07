@@ -11,6 +11,8 @@ import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import android.widget.Toast
 import kotlinx.coroutines.launch
+import java.net.URLEncoder
+import java.nio.charset.StandardCharsets
 import unsa.rfr.com.RefractorLog
 import unsa.rfr.com.RfrIdGenerator
 import unsa.rfr.com.SignalingClient
@@ -82,7 +84,9 @@ fun CreateRoomScreen(navController: NavController) {
                     scope.launch {
                         val success = signalingClient.createRoom(roomId, name, hasPassword, passwordHash, limit!!)
                         if (success) {
-                            navController.navigate("room/$roomId/broadcaster")
+                            navController.navigate(
+                                "room/$roomId/broadcaster" + if (hasPassword) "?password=${URLEncoder.encode(password, StandardCharsets.UTF_8.name())}" else ""
+                            )
                         } else {
                             RefractorLog.write("创建房间失败")
                             Toast.makeText(context, "创建房间失败，请检查网络后重试", Toast.LENGTH_LONG).show()
