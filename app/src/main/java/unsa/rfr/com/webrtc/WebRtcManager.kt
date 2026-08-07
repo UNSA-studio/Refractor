@@ -3,7 +3,9 @@ package unsa.rfr.com.webrtc
 import android.content.Context
 import android.util.Log
 import org.webrtc.*
+import org.webrtc.audio.AudioDeviceModule
 import unsa.rfr.com.SignalingClient
+import unsa.rfr.com.audio.AudioCaptureManager
 
 class WebRtcManager(
     private val context: Context,
@@ -13,12 +15,19 @@ class WebRtcManager(
 ) {
     companion object {
         private const val TAG = "WebRtcManager"
+        private const val CAPTURE_WIDTH = 720
+        private const val CAPTURE_HEIGHT = 1280
+        private const val CAPTURE_FPS = 30
     }
 
     private var peerConnection: PeerConnection? = null
     private var videoTrack: VideoTrack? = null
     private var audioTrack: AudioTrack? = null
     private var videoCapturer: VideoCapturer? = null
+    private var videoSource: VideoSource? = null
+    private var surfaceTextureHelper: SurfaceTextureHelper? = null
+    private var audioDeviceModule: AudioDeviceModule? = null
+    private var audioCaptureManager: AudioCaptureManager? = null
 
     private val peerConnectionFactory: PeerConnectionFactory by lazy {
         val options = PeerConnectionFactory.InitializationOptions.builder(context)
@@ -26,26 +35,67 @@ class WebRtcManager(
         PeerConnectionFactory.initialize(options)
         PeerConnectionFactory.builder()
             .setVideoEncoderFactory(DefaultVideoEncoderFactory(eglBase.eglBaseContext, true, true))
+            .apply { audioDeviceModule?.let { setAudioDeviceModule(it) } }
             .createPeerConnectionFactory()
     }
 
-    fun startAsBroadcaster(videoCapturer: VideoCapturer, audioSource: AudioSource) {
+    /**
+     * 主播端开始直播。
+     * @param audioDeviceModule 自定义音频设备模块（由 AudioCaptureManager 按音频模式创建），
+     *                          传入 null 时使用默认麦克风。必须在首次访问 factory 之前设置。
+     * @param audioCaptureManager 音频采集管理器（内部音频线程等），dispose 时一并停止。
+     */
+    fun startAsBroadcaster(
+        videoCapturer: VideoCapturer,
+        audioDeviceModule: AudioDeviceModule?,
+        audioCaptureManager: AudioCaptureManager? = null
+    ) {
         this.videoCapturer = videoCapturer
+        this.audioDeviceModule = audioDeviceModule
+        this.audioCaptureManager = audioCaptureManager
         createPeerConnection()
 
-        val videoSource = peerConnectionFactory.createVideoSource(false)
-        val surfaceTextureHelper = SurfaceTextureHelper.create("CaptureThread", eglBase.eglBaseContext)
-        videoCapturer.initialize(surfaceTextureHelper, context, videoSource.capturerObserver)
-        videoCapturer.startCapture(720, 1280, 30)
+        val source = peerConnectionFactory.createVideoSource(false)
+        this.videoSource = source
+        val stHelper = SurfaceTextureHelper.create("CaptureThread", eglBase.eglBaseContext)
+        this.surfaceTextureHelper = stHelper
+        videoCapturer.initialize(stHelper, context, source.capturerObserver)
+        videoCapturer.startCapture(CAPTURE_WIDTH, CAPTURE_HEIGHT, CAPTURE_FPS)
 
-        videoTrack = peerConnectionFactory.createVideoTrack("video", videoSource)
+        videoTrack = peerConnectionFactory.createVideoTrack("video", source)
         videoTrack?.addSink(videoSink)
         peerConnection?.addTrack(videoTrack)
 
+        val audioSource = peerConnectionFactory.createAudioSource(MediaConstraints())
         audioTrack = peerConnectionFactory.createAudioTrack("audio", audioSource)
         peerConnection?.addTrack(audioTrack)
 
         createOffer()
+    }
+
+    /** 暂停/恢复画面投射（音频继续）。 */
+    fun setVideoEnabled(enabled: Boolean) {
+        videoTrack?.setEnabled(enabled)
+        if (!enabled) {
+            videoCapturer?.stopCapture()
+        } else {
+            videoCapturer?.startCapture(CAPTURE_WIDTH, CAPTURE_HEIGHT, CAPTURE_FPS)
+        }
+    }
+
+    /** 用新的屏幕捕获源替换当前视频源（重新授权后调用）。 */
+    fun replaceVideoCapturer(newCapturer: VideoCapturer) {
+        val old = videoCapturer
+        old?.stopCapture()
+        old?.dispose()
+        videoCapturer = newCapturer
+        val stHelper = surfaceTextureHelper
+        val source = videoSource
+        if (stHelper != null && source != null) {
+            newCapturer.initialize(stHelper, context, source.capturerObserver)
+            newCapturer.startCapture(CAPTURE_WIDTH, CAPTURE_HEIGHT, CAPTURE_FPS)
+        }
+        videoTrack?.setEnabled(true)
     }
 
     fun startAsViewer() {
@@ -152,6 +202,8 @@ class WebRtcManager(
         videoCapturer?.dispose()
         videoTrack?.dispose()
         audioTrack?.dispose()
+        audioDeviceModule?.release()
+        audioCaptureManager?.stop()
         peerConnection?.dispose()
     }
 

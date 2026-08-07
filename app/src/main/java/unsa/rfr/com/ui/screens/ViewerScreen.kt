@@ -21,7 +21,7 @@ import unsa.rfr.com.webrtc.WebRtcManager
 data class VChatMessage(val text: String, val isMine: Boolean)
 
 @Composable
-fun ViewerScreen(roomId: String, navController: NavController) {
+fun ViewerScreen(roomId: String, password: String?, navController: NavController) {
     val context = LocalContext.current
     val signalingClient = remember { SignalingClient() }
     val eglBase = remember { EglBase.create() }
@@ -30,6 +30,7 @@ fun ViewerScreen(roomId: String, navController: NavController) {
     var chatMessages by remember { mutableStateOf(listOf<VChatMessage>()) }
     var chatInput by remember { mutableStateOf("") }
     var connectionStatus by remember { mutableStateOf("连接中…") }
+    var joinRejected by remember { mutableStateOf(false) }
 
     val renderer = remember {
         SurfaceViewRenderer(context).apply {
@@ -41,7 +42,7 @@ fun ViewerScreen(roomId: String, navController: NavController) {
 
     LaunchedEffect(roomId) {
         RefractorLog.write("ViewerScreen 进入房间 $roomId")
-        signalingClient.connect(roomId)
+        signalingClient.connect(roomId, password?.takeIf { it.isNotBlank() })
 
         val timeoutJob = scope.launch {
             delay(15_000)
@@ -69,8 +70,17 @@ fun ViewerScreen(roomId: String, navController: NavController) {
                             RefractorLog.write("信令解析失败: ${e.message}")
                         }
                     }
-                    is SignalingClient.SignalMessage.Chat -> chatMessages = chatMessages + VChatMessage(msg.message, false)
+                    is SignalingClient.SignalMessage.Chat -> {
+                        val mine = msg.from == signalingClient.clientId
+                        chatMessages = chatMessages + VChatMessage(if (mine) "我: ${msg.message}" else "${msg.from}: ${msg.message}", mine)
+                    }
                     is SignalingClient.SignalMessage.UserJoined -> if (connectionStatus.startsWith("连接")) connectionStatus = "等待主播开始直播…"
+                    is SignalingClient.SignalMessage.Error -> {
+                        // 服务器拒绝加入（房间已满 / 密码错误等）
+                        RefractorLog.write("服务器错误: ${msg.message}")
+                        connectionStatus = "加入失败: ${msg.message}"
+                        joinRejected = true
+                    }
                     else -> {}
                 }
             }
@@ -88,21 +98,21 @@ fun ViewerScreen(roomId: String, navController: NavController) {
         }
 
         Row(Modifier.fillMaxWidth().padding(8.dp)) {
-            OutlinedTextField(value = chatInput, onValueChange = { chatInput = it }, modifier = Modifier.weight(1f), label = { Text("消息") })
+            OutlinedTextField(value = chatInput, onValueChange = { chatInput = it }, modifier = Modifier.weight(1f), label = { Text("消息") }, enabled = !joinRejected)
             Spacer(modifier = Modifier.width(8.dp))
             Button(onClick = {
                 if (chatInput.isNotBlank()) {
-                    signalingClient.send("{\"type\":\"chat\",\"data\":\"$chatInput\"}")
-                    chatMessages = chatMessages + VChatMessage(chatInput, true)
+                    signalingClient.sendChat(chatInput)
+                    chatMessages = chatMessages + VChatMessage("我: $chatInput", true)
                     chatInput = ""
                 }
-            }) { Text("发送") }
+            }, enabled = !joinRejected) { Text("发送") }
         }
 
         Button(onClick = {
             webRtcManager?.dispose()
             signalingClient.disconnect()
             navController.popBackStack()
-        }, modifier = Modifier.fillMaxWidth()) { Text("退出直播") }
+        }, modifier = Modifier.fillMaxWidth()) { Text(if (joinRejected) "返回" else "退出直播") }
     }
 }

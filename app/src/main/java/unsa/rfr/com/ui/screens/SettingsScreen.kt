@@ -35,11 +35,16 @@ fun SettingsScreen(navController: NavController) {
 
     var audioMode by remember { mutableIntStateOf(prefs.getInt("audio_mode", 0)) }
     var selectedThemeName by remember { mutableStateOf(prefs.getString("theme_color", "BLUE") ?: "BLUE") }
+    var dynamicColor by remember { mutableStateOf(prefs.getBoolean("dynamic_color", false)) }
     var themeExpanded by remember { mutableStateOf(false) }
     val themeOptions = ThemeColor.entries.map { it.name }
 
     fun saveSettings() {
-        prefs.edit().putInt("audio_mode", audioMode).putString("theme_color", selectedThemeName).apply()
+        prefs.edit()
+            .putInt("audio_mode", audioMode)
+            .putString("theme_color", selectedThemeName)
+            .putBoolean("dynamic_color", dynamicColor)
+            .apply()
     }
 
     BackHandler {
@@ -92,6 +97,18 @@ fun SettingsScreen(navController: NavController) {
                 }
             }
         }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+            Text("动态取色 (Material You)", style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
+            Switch(checked = dynamicColor, onCheckedChange = { dynamicColor = it })
+        }
+        Text(
+            "启用系统动态配色，需 Android 12+ 且选择 DYNAMIC 主题",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
 
         Spacer(modifier = Modifier.height(16.dp))
 

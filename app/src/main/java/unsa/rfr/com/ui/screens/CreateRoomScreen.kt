@@ -9,13 +9,16 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
+import android.widget.Toast
 import kotlinx.coroutines.launch
+import unsa.rfr.com.RefractorLog
 import unsa.rfr.com.RfrIdGenerator
 import unsa.rfr.com.SignalingClient
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CreateRoomScreen(navController: NavController) {
+    val context = LocalContext.current
     var name by remember { mutableStateOf("") }
     var maxUsers by remember { mutableStateOf("") }
     var hasPassword by remember { mutableStateOf(false) }
@@ -81,7 +84,8 @@ fun CreateRoomScreen(navController: NavController) {
                         if (success) {
                             navController.navigate("room/$roomId/broadcaster")
                         } else {
-                            // 可显示提示
+                            RefractorLog.write("创建房间失败")
+                            Toast.makeText(context, "创建房间失败，请检查网络后重试", Toast.LENGTH_LONG).show()
                         }
                         isCreating = false
                     }

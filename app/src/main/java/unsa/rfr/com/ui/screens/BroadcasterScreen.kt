@@ -1,5 +1,6 @@
 package unsa.rfr.com.ui.screens
 
+import android.content.Context
 import android.content.Intent
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -30,6 +31,7 @@ data class BChatMessage(val text: String, val isMine: Boolean)
 @Composable
 fun BroadcasterScreen(roomId: String, navController: NavController) {
     val context = LocalContext.current
+    val prefs = remember { context.getSharedPreferences("settings", Context.MODE_PRIVATE) }
     val signalingClient = remember { SignalingClient() }
     val eglBase = remember { EglBase.create() }
     var webRtcManager by remember { mutableStateOf<WebRtcManager?>(null) }
@@ -37,6 +39,11 @@ fun BroadcasterScreen(roomId: String, navController: NavController) {
     var chatMessages by remember { mutableStateOf(listOf<BChatMessage>()) }
     var chatInput by remember { mutableStateOf("") }
     var viewerCount by remember { mutableIntStateOf(0) }
+    var errorMessage by remember { mutableStateOf<String?>(null) }
+    var projectionActive by remember { mutableStateOf(false) }
+    var showAudioDialog by remember { mutableStateOf(false) }
+    // 音频模式：0=仅麦克风 1=仅内部音频 2=都接收（与设置页一致）
+    var audioMode by remember { mutableIntStateOf(prefs.getInt("audio_mode", 0)) }
 
     val renderer = remember {
         SurfaceViewRenderer(context).apply {
@@ -61,21 +68,21 @@ fun BroadcasterScreen(roomId: String, navController: NavController) {
                 val capturer = ScreenCaptureService.videoCapturer
                 if (capturer == null) {
                     RefractorLog.write("ERROR: videoCapturer 仍为空")
+                    errorMessage = "屏幕捕获初始化失败，请重试"
                     return@launch
                 }
                 try {
                     val audioManager = AudioCaptureManager(context)
-                    val audioSource = audioManager.createAudioSource(AudioCaptureManager.AudioMode.MIC_ONLY)
-                    if (audioSource == null) {
-                        RefractorLog.write("ERROR: 无法创建麦克风音频源")
-                        return@launch
-                    }
+                    val mode = AudioCaptureManager.AudioMode.entries[audioMode.coerceIn(0, 2)]
+                    val adm = audioManager.createAudioDeviceModule(mode, ScreenCaptureService.mediaProjection)
                     val manager = WebRtcManager(context, signalingClient, eglBase, renderer)
-                    manager.startAsBroadcaster(capturer, audioSource)
+                    manager.startAsBroadcaster(capturer, adm, audioManager)
                     webRtcManager = manager
-                    RefractorLog.write("直播已开始")
+                    projectionActive = true
+                    RefractorLog.write("直播已开始, 音频模式=$mode")
                 } catch (e: Exception) {
                     RefractorLog.write("启动直播失败: ${e.stackTraceToString()}")
+                    errorMessage = "启动直播失败: ${e.message}"
                 }
             }
         } else {
@@ -89,15 +96,20 @@ fun BroadcasterScreen(roomId: String, navController: NavController) {
             signalingClient.connect(roomId)
         } catch (e: Exception) {
             RefractorLog.write("信令连接失败: ${e.stackTraceToString()}")
+            errorMessage = "信令连接失败"
             return@LaunchedEffect
         }
 
         scope.launch {
             for (msg in signalingClient.signalChannel) {
                 when (msg) {
-                    is SignalingClient.SignalMessage.Chat -> chatMessages = chatMessages + BChatMessage(msg.message, false)
+                    is SignalingClient.SignalMessage.Chat -> {
+                        val mine = msg.from == signalingClient.clientId
+                        chatMessages = chatMessages + BChatMessage(if (mine) "我: ${msg.message}" else "${msg.from}: ${msg.message}", mine)
+                    }
                     is SignalingClient.SignalMessage.UserJoined -> viewerCount = msg.count
                     is SignalingClient.SignalMessage.UserLeft -> viewerCount = msg.count
+                    is SignalingClient.SignalMessage.Error -> errorMessage = msg.message
                     else -> {}
                 }
             }
@@ -105,6 +117,39 @@ fun BroadcasterScreen(roomId: String, navController: NavController) {
 
         val mpm = context.getSystemService(android.media.projection.MediaProjectionManager::class.java)
         screenCaptureLauncher.launch(mpm.createScreenCaptureIntent())
+    }
+
+    // 音频设置弹窗：选择后保存，下次开播生效
+    if (showAudioDialog) {
+        var tempMode by remember { mutableIntStateOf(audioMode) }
+        AlertDialog(
+            onDismissRequest = { showAudioDialog = false },
+            title = { Text("音频设置") },
+            text = {
+                Column {
+                    listOf("仅麦克风", "仅内部音频", "都接收").forEachIndexed { index, label ->
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            RadioButton(selected = tempMode == index, onClick = { tempMode = index })
+                            Text(label)
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text("更改后将在下次开播时生效", style = MaterialTheme.typography.bodySmall)
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    audioMode = tempMode
+                    prefs.edit().putInt("audio_mode", tempMode).apply()
+                    RefractorLog.write("音频模式已修改为 $tempMode")
+                    showAudioDialog = false
+                }) { Text("保存") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showAudioDialog = false }) { Text("取消") }
+            },
+            containerColor = MaterialTheme.colorScheme.surface
+        )
     }
 
     Scaffold(
@@ -118,12 +163,27 @@ fun BroadcasterScreen(roomId: String, navController: NavController) {
         Column(Modifier.fillMaxSize().padding(padding)) {
             AndroidView(factory = { renderer }, modifier = Modifier.fillMaxWidth().weight(0.3f))
 
+            if (errorMessage != null) {
+                Text(
+                    errorMessage.orEmpty(),
+                    color = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
+                )
+            }
+
             Row(Modifier.fillMaxWidth().padding(8.dp), horizontalArrangement = Arrangement.SpaceEvenly) {
-                Button(onClick = {}) { Text("音频设置") }
-                Button(onClick = {}) { Text("停止投射") }
+                Button(onClick = { showAudioDialog = true }) { Text("音频设置") }
+                Button(onClick = {
+                    val manager = webRtcManager ?: return@Button
+                    projectionActive = !projectionActive
+                    manager.setVideoEnabled(projectionActive)
+                    RefractorLog.write(if (projectionActive) "已恢复投射" else "已停止投射")
+                }) { Text(if (projectionActive) "停止投射" else "恢复投射") }
                 Button(onClick = {
                     webRtcManager?.dispose()
+                    webRtcManager = null
                     signalingClient.disconnect()
+                    context.stopService(Intent(context, ScreenCaptureService::class.java))
                     navController.popBackStack()
                 }) { Text("结束直播") }
             }
@@ -139,8 +199,8 @@ fun BroadcasterScreen(roomId: String, navController: NavController) {
                 Spacer(modifier = Modifier.width(8.dp))
                 Button(onClick = {
                     if (chatInput.isNotBlank()) {
-                        signalingClient.send("{\"type\":\"chat\",\"data\":\"$chatInput\"}")
-                        chatMessages = chatMessages + BChatMessage(chatInput, true)
+                        signalingClient.sendChat(chatInput)
+                        chatMessages = chatMessages + BChatMessage("我: $chatInput", true)
                         chatInput = ""
                     }
                 }) { Text("发送") }

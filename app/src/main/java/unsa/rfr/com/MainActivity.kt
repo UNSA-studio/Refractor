@@ -73,18 +73,20 @@ fun AppNavGraph() {
         composable("home") { HomeScreen(navController) }
         composable("create") { CreateRoomScreen(navController) }
         composable(
-            "room/{roomId}/{role}",
+            "room/{roomId}/{role}?password={password}",
             arguments = listOf(
                 navArgument("roomId") { type = NavType.StringType },
-                navArgument("role") { type = NavType.StringType }
+                navArgument("role") { type = NavType.StringType },
+                navArgument("password") { type = NavType.StringType; defaultValue = "" }
             )
         ) { backStackEntry ->
             val roomId = backStackEntry.arguments?.getString("roomId") ?: ""
             val role = backStackEntry.arguments?.getString("role") ?: "viewer"
+            val password = backStackEntry.arguments?.getString("password")
             if (role == "broadcaster") {
                 BroadcasterScreen(roomId, navController)
             } else {
-                ViewerScreen(roomId, navController)
+                ViewerScreen(roomId, password, navController)
             }
         }
         composable("settings") { SettingsScreen(navController) }

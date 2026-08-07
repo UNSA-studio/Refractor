@@ -26,6 +26,10 @@ class SignalingClient(
     private var heartbeatJob: Job? = null
     private val connected = AtomicBoolean(false)
     private var currentRoomId: String? = null
+    private var currentPassword: String? = null
+
+    /** 本机客户端标识，用于聊天消息发送者标识 */
+    val clientId: String = "user" + (100..999).random()
 
     val signalChannel = Channel<SignalMessage>(Channel.BUFFERED)
 
@@ -104,8 +108,9 @@ class SignalingClient(
         }
     }
 
-    fun connect(roomId: String) {
+    fun connect(roomId: String, password: String? = null) {
         currentRoomId = roomId
+        currentPassword = password
         RefractorLog.write("开始连接信令, room=$roomId")
         doConnect()
         startHeartbeat()
@@ -120,7 +125,12 @@ class SignalingClient(
                 Log.d(TAG, "Connected to room $roomId")
                 RefractorLog.write("信令WebSocket已连接: $roomId")
                 connected.set(true)
-                send("{\"type\":\"join\"}")
+                val join = JSONObject().apply {
+                    put("type", "join")
+                    put("clientId", clientId)
+                    currentPassword?.let { put("password", it) }
+                }
+                send(join.toString())
                 reconnectJob?.cancel()
             }
 
@@ -201,12 +211,23 @@ class SignalingClient(
         }
     }
 
+    /** 发送聊天消息（JSONObject 转义，带发送者标识） */
+    fun sendChat(message: String) {
+        val json = JSONObject().apply {
+            put("type", "chat")
+            put("data", message)
+            put("from", clientId)
+        }
+        send(json.toString())
+    }
+
     fun disconnect() {
         connected.set(false)
         heartbeatJob?.cancel()
         reconnectJob?.cancel()
         webSocketClient?.close()
         currentRoomId = null
+        currentPassword = null
         RefractorLog.write("信令已断开")
     }
 }

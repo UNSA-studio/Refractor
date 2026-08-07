@@ -104,9 +104,6 @@ fun RefractorTheme(
         dynamicColor && themeColor == ThemeColor.DYNAMIC && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
             dynamicDarkColorScheme(LocalContext.current)
         }
-        dynamicColor && themeColor == ThemeColor.DYNAMIC && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
-            dynamicDarkColorScheme(LocalContext.current)
-        }
         else -> themeColor.colorScheme
     }
     MaterialTheme(
