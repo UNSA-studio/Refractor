@@ -108,6 +108,25 @@ class SignalingClient(
         }
     }
 
+    /** 删除房间（主播结束直播时调用） */
+    suspend fun deleteRoom(roomId: String): Boolean {
+        return withContext(Dispatchers.IO) {
+            try {
+                val url = URL("https://rfr-sl.cc.cd/delete/$roomId")
+                val conn = url.openConnection() as HttpURLConnection
+                conn.connectTimeout = 5000
+                conn.readTimeout = 5000
+                conn.requestMethod = "POST"
+                val code = conn.responseCode
+                RefractorLog.write("Delete room $roomId: HTTP $code")
+                code == 200
+            } catch (e: Exception) {
+                RefractorLog.write("Delete room failed: ${e.message}")
+                false
+            }
+        }
+    }
+
     fun connect(roomId: String, password: String? = null) {
         currentRoomId = roomId
         currentPassword = password

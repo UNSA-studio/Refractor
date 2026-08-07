@@ -182,6 +182,7 @@ fun BroadcasterScreen(roomId: String, password: String?, navController: NavContr
                 Button(onClick = {
                     webRtcManager?.dispose()
                     webRtcManager = null
+                    scope.launch { signalingClient.deleteRoom(roomId) } // 删除房间（失败不影响退出，服务器兜底清理）
                     signalingClient.disconnect()
                     context.stopService(Intent(context, ScreenCaptureService::class.java))
                     navController.popBackStack()
