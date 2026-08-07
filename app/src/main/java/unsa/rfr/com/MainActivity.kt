@@ -34,8 +34,8 @@ import java.nio.charset.StandardCharsets
 class MainActivity : ComponentActivity() {
 
     companion object {
-        // TODO: 替换为 refractor-account 账户服务的真实部署地址（workers.dev 或自定义域名）
-        private const val ACCOUNT_HOST = "REPLACE_WITH_ACCOUNT_HOST"
+        // refractor-account 账户服务部署地址（workers.dev 或自定义域名）
+        private const val ACCOUNT_HOST = "account-rfr.cc.cd"
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
